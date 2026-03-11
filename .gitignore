@@ -1,0 +1,27 @@
+# Vivado generated files
+*.jou
+*.log
+*.str
+*.pb
+*.wdb
+*.vcd
+*.xpr~
+
+# Vivado project cache & build outputs
+DMA_/DMA_.cache/
+DMA_/DMA_.runs/
+DMA_/DMA_.sim/
+DMA_/DMA_.hw/
+DMA_/DMA_.ip_user_files/
+DMA_/DMA_.gen/
+
+# IP generated cores
+DMA_/DMA_.srcs/sources_1/ip/
+
+# Vivado backup files
+*.jou.bak
+*.xpr.bak
+
+# OS metadata
+.DS_Store
+Thumbs.db

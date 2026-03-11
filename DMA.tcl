@@ -1,0 +1,5 @@
+launch_runs synth_1
+wait_on_run synth_1
+open_run synth_1
+report_utilization
+report_timing_summary
