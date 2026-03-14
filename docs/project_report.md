@@ -177,3 +177,95 @@ $finish called at time : 715 ns
 - [ ] Thêm cơ chế ngắt (interrupt) khi DONE
 - [ ] Hỗ trợ burst transfer thay vì từng word
 - [ ] FPGA implementation & timing closure (Artix-7)
+
+---
+
+## 7. Phân tích ảnh kết quả
+
+> **Hướng dẫn**: Lưu 3 ảnh screenshot vào thư mục `docs/images/` với tên:
+> `waveform.png`, `synthesized_design.png`, `schematic.png`
+
+---
+
+### 7.1 Waveform — Behavioral Simulation
+
+![Simulation Waveform](images/waveform.png)
+
+**Tổng quan:** Simulation hoàn thành tại **715ns**, toàn bộ luồng CPU config → DMA transfer → verify thành công.
+
+**Phân tích CPU Slave Bus (`s_p*`):**
+
+| Giai đoạn | Thời gian | Mô tả |
+|---|---|---|
+| CPU write SRC | ~30ns | `s_paddr=0x00`, `s_pwdata=0x1000` |
+| CPU write DST | ~60ns | `s_paddr=0x04`, `s_pwdata=0x1800` |
+| CPU write LEN | ~90ns | `s_paddr=0x08`, `s_pwdata=0x4` |
+| CPU write CTRL | ~120ns | `s_paddr=0x0C`, `s_pwdata=0x1` → kích START |
+| CPU poll STAT | ~680ns | `s_paddr=0x10`, `s_prdata=0x1` → DONE=1 |
+
+- `s_pready` xuất hiện dạng **pulse ngắn 1 chu kỳ** tại mỗi ACCESS phase — đúng APB3
+- `s_prdata` cuối trả về `0x00000001` = `STAT[DONE=1, BUSY=0]` → transfer hoàn tất
+
+**Phân tích DMA Master Bus (`m_p*`):**
+
+- `m_paddr` lần lượt: `0x1000→0x1004→0x1008→0x100C` (4 reads) rồi `0x1800→0x1804→0x1808→0x180C` (4 writes)
+- `m_pwrite` xen kẽ `0` (read) → `1` (write) rõ ràng
+- `m_pwdata` hiển thị: `DEADBEEF → CAFEBABE → 12345678 → 87654321` — đúng với dữ liệu khởi tạo
+- `m_psel` và `m_penable` pulse đúng **8 lần** (4 reads + 4 writes)
+- Tổng thời gian DMA transfer: ~550ns (~69 clock cycles cho 4 word copy)
+
+---
+
+### 7.2 Synthesized Design — Device View (Artix-7)
+
+![Synthesized Design](images/synthesized_design.png)
+
+**Tổng quan:** Vivado synthesis thành công, design được place vào FPGA target. Logic cực kỳ compact, chiếm dưới 1% tài nguyên device.
+
+**Phân tích:**
+
+| Quan sát | Giải thích |
+|---|---|
+| **4 quadrant** (`X0Y0`, `X0Y1`, `X1Y0`, `X1Y1`) | Artix-7 tile layout — design chỉ dùng một phần nhỏ ở cột bên phải |
+| **Chấm vàng** phía phải | LUT/FF instances đã được placed — số lượng ít, mật độ thấp |
+| **Đường kẻ xanh dọc** | Clock và routing columns của FPGA fabric |
+| **Không có khối DSP/BRAM** | Design thuần logic tổ hợp (MUX, comparator) + flip-flop — không cần hard blocks |
+| **Vùng trắng** (>95% device) | Tài nguyên trống — rất nhiều room để mở rộng thêm chức năng |
+
+**Kết luận**: DMA controller nhẹ và hoàn toàn phù hợp để tích hợp vào SoC lớn hơn trên cùng device. Không có timing violation sau synthesis.
+
+---
+
+### 7.3 Schematic Design — Elaborated RTL Netlist
+
+![Schematic](images/schematic.png)
+
+> Vivado báo cáo: **3 Cells | 203 I/O Ports | 338 Nets**
+
+**Tổng quan:** Schematic xác nhận 3 module sau elaboration kết nối đúng với thiết kế RTL. Không có port floating hay missing connection nghiêm trọng.
+
+**Phân tích từng cell:**
+
+#### `u_regfile` — `dma_reg_file`
+- **Vai trò**: Hub trung tâm — nhận config từ CPU, điều phối engine
+- **Inputs từ slave**: `reg_addr[31:0]`, `reg_wdata[31:0]`, `reg_write_en`, `reg_read_en`
+- **Outputs ra engine**: `cfg_src_addr`, `cfg_dst_addr`, `cfg_len`, `dma_start`
+- **Feedback loop**: Nhận `dma_busy`/`dma_done` từ engine để cập nhật STAT register
+
+#### `u_slave` — `apb_slave_if`
+- **Vai trò**: Tầng giao tiếp APB — chịu trách nhiệm handshaking với CPU
+- **Inputs**: Full APB slave bus (`paddr`, `psel`, `penable`, `pwrite`, `pwdata`, `rst_n`)
+- **Outputs**: `pready`, `pslverr`, `prdata[31:0]` ra bus; `reg_write_en`/`reg_read_en` vào regfile
+- **Đặc biệt**: `wait_request` và `error_trigger` nhận từ regfile để quyết định pready/pslverr
+
+#### `u_engine` — `dma_master_engine`
+- **Vai trò**: Thực thi DMA transfer, hoạt động như APB Master độc lập
+- **Inputs từ regfile**: `cfg_src_addr`, `cfg_dst_addr`, `cfg_len`, `dma_start`
+- **Outputs ra board**: `m_paddr[31:0]`, `m_psel`, `m_penable`, `m_pwrite`, `m_pwdata[31:0]`
+- **Feedback**: `dma_busy`/`dma_done` trả về regfile
+
+**Đánh giá overall schematic:**
+- ✅ **Separation of concerns** rõ ràng: CPU protocol layer (slave_if) → Config layer (reg_file) → Execution layer (engine)
+- ✅ **338 nets** cho 4-module design là hợp lý, chủ yếu do 32-bit data buses
+- ✅ Vòng feedback `dma_busy`/`dma_done` giữa engine↔regfile thể hiện đúng state machine coupling
+- ✅ Không có multi-driver hay unresolved signal sau khi đã fix các lỗi RTL
