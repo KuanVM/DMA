@@ -155,6 +155,10 @@ $finish called at time : 715 ns
 | 2 | `0x12345678` | `0x12345678` | ✅ |
 | 3 | `0x87654321` | `0x87654321` | ✅ |
 
+**Tcl Console output (Vivado XSim):**
+
+![Tcl Console](images/tcl_console.png)
+
 ---
 
 ## 5. Các vấn đề đã phát hiện & khắc phục
@@ -181,9 +185,6 @@ $finish called at time : 715 ns
 ---
 
 ## 7. Phân tích ảnh kết quả
-
-> **Hướng dẫn**: Lưu 3 ảnh screenshot vào thư mục `docs/images/` với tên:
-> `waveform.png`, `synthesized_design.png`, `schematic.png`
 
 ---
 
