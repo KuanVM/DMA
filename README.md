@@ -100,6 +100,6 @@ DMA/
 ```
 
 ## Tác giả
-Vũ Minh Quân \n
-APB DMA Controller \n
-Mar 2026
+Vũ Minh Quân
+ - APB DMA Controller 
+
