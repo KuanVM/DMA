@@ -99,7 +99,3 @@ DMA/
     └── tb_top.sv                    # Alternative testbench
 ```
 
-## Tác giả
-Vũ Minh Quân
- - APB DMA Controller 
-
