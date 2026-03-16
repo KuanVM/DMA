@@ -100,6 +100,6 @@ DMA/
 ```
 
 ## Tác giả
-Vũ Minh Quân
-Vivado Project — APB DMA Controller
+Vũ Minh Quân \n
+APB DMA Controller \n
 Mar 2026
